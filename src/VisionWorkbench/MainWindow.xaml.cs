@@ -62,6 +62,8 @@ public partial class MainWindow : Window
         Controller.StateChanged += () => Dispatcher.Invoke(RefreshWorkspace);
         Controller.Logged += message => Dispatcher.Invoke(() => AppendLog(message));
         RefreshWorkspace();
+        InitializeDevices();
+        chat.Tools.Devices = Devices;
         PreviewKeyDown += Workspace_KeyDown;
 
         try
@@ -297,8 +299,9 @@ public partial class MainWindow : Window
         else return;
         e.Handled = true;
     }
-    private void OpenImage_Click(object sender, RoutedEventArgs e)
+    private async void OpenImage_Click(object sender, RoutedEventArgs e)
     {
+        await Devices.StopPreviewAsync();
         var dialog = new OpenFileDialog { Filter = "图像|*.png;*.bmp;*.jpg;*.jpeg;*.tif;*.tiff|所有文件|*.*" };
         if (dialog.ShowDialog(this) == true) Perform(() => { fitImage = true; Controller.LoadImage(dialog.FileName); });
     }
@@ -313,12 +316,12 @@ public partial class MainWindow : Window
         var dialog = new SaveFileDialog { Filter = "视觉方案|*.json", FileName = string.IsNullOrEmpty(Controller.ProjectPath) ? "检测方案.json" : Controller.ProjectPath };
         if (dialog.ShowDialog(this) == true) Perform(() => Controller.SaveProject(dialog.FileName));
     }
-    private async void Run_Click(object sender, RoutedEventArgs e) => await ExecuteAsync(async token => { await Controller.RunAsync(token: token); });
+    private async void Run_Click(object sender, RoutedEventArgs e) => await ExecuteAsync(async token => { await Devices.StopPreviewAsync(); await Controller.RunAsync(token: token); });
     private void Stop_Click(object sender, RoutedEventArgs e) => cancellation?.Cancel();
     private async void RunToStep_Click(object sender, RoutedEventArgs e)
     {
         if (SelectedStep is { } step)
-            await ExecuteAsync(async token => await Controller.RunAsync(step.Id, token));
+            await ExecuteAsync(async token => { await Devices.StopPreviewAsync(); await Controller.RunAsync(step.Id, token); });
     }
     private async void Batch_Click(object sender, RoutedEventArgs e)
     {

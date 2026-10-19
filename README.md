@@ -1,6 +1,6 @@
 # VisionWorkbench
 
-一个用于学习完整工业视觉软件开发的 C# 桌面项目。采用 **.NET 10 / WPF / HALCON 24.11**，少量 OpenCvSharp 工具用于练习。界面围绕顺序检测流程、图像、参数和结果展开，并提供 AI 聊天与本机 Harness 工具接口。
+一个用于学习完整工业视觉软件开发的 C# 桌面项目。采用 **.NET 10 / WPF / HALCON 24.11**，少量 OpenCvSharp 工具用于练习。界面围绕顺序检测流程、图像、参数和结果展开，并提供相机采集、设备通信、结果追溯、AI 聊天与本机 Harness 工具接口。
 
 ![中文视觉工作台](docs/images/workbench.png)
 
@@ -13,10 +13,14 @@
 - OpenCV 灰度、高斯、中值、Canny。
 - 整条流程或运行到指定步骤；OK/NG、指标、耗时和错误记录。
 - JSON 方案及配套图像、模板资源保存；文件夹批量检测和 CSV 导出。
-- AI 查看流程、修改数值参数与 ROI、添加已有工具、运行并读取真实结果。
+- 相机统一接口：海康 MVS SDK 实例、HALCON 工业接口、OpenCV USB、文件/视频回放与模拟采集。
+- 单次拍照、后台实时预览、拍照检测；窗体使用 CommunityToolkit 消息总线同步。
+- TCP/IP 和普通串口 JSON 指令；NModbus 实现 Modbus TCP/RTU、PLC 触发与 OK/NG/错误回写。
+- 检测追溯、NG/全部图像保存、历史指标与 CSV 导出。
+- 10 个固定 AI/Harness 工具：查看流程/设备、修改参数和 ROI、控制已连接相机预览、拍照检测并读取真实结果。
 - 带本次会话认证的 loopback HTTP Harness；与聊天和界面使用同一业务控制器。
 
-这是范围明确的学习项目。第一版使用顺序流程和本地图像，未包含相机采集、PLC、标定、插件市场或 AI 生成算法代码。
+当前为 0.3 版学习工作站，串起“采集 → 检测 → 通信回传 → 追溯”。同时保留明确边界：一台活动相机、顺序流程；未包含多相机同步、物理标定、插件市场或 AI 生成算法代码。海康适配已写入，但本机没有 MVS SDK/实机，不能将离线检查视为现场验收。
 
 ## 环境与启动
 
@@ -47,11 +51,23 @@ dotnet publish .\src\VisionWorkbench\VisionWorkbench.csproj -c Release -r win-x6
 
 ![圆 ROI 与测量模型](docs/images/metrology.png)
 
+## 采集、通信与追溯
+
+通过“设备 → 设备与通信设置”配置。离线体验：先加载“示例”流程，选择“模拟相机”并连接，再“开始预览”或“拍照检测”。实时预览只采图；一次拍照检测会停止预览、采集新帧并运行当前流程。
+
+海康作为具体 SDK 实例，填写 MVS 兼容托管库 `MvCameraControl.Net.dll` 路径并枚举序列号。其他品牌可实现 `IFrameSource` 并用 `FrameSources.Register` 注册，HALCON 通用接口可连接其支持的设备。厂商 SDK 与驱动由用户安装，不上传仓库。
+
+TCP/串口接受 `STATUS` 和 `TRIGGER` JSON 行请求；Modbus TCP/RTU 轮询触发寄存器，并回写完成标记、OK/NG/错误、序号和耗时。设备参数独立保存，不随方案共享。程序启动不会自动连接硬件。
+
+[采集、海康接入与消息总线](docs/Acquisition.md) · [通信协议与寄存器表](docs/Communication.md) · [实际复用与源码参考](docs/References.md)
+
+![设备设置](docs/images/devices.png)
+
 ## AI 与 Harness
 
 “AI 助手 → 连接设置”配置兼容 OpenAI Chat Completions 工具调用的 API 地址、模型和 API Key。兼容服务必须实际支持工具调用。API Key 使用 Windows DPAPI 当前用户加密，设置存于 `%LOCALAPPDATA%\VisionWorkbench\ai-settings.json`。
 
-聊天发送文本、工具定义、流程参数、ROI 和执行结果；不会自动发送图像字节。项目名称、工具名称和错误文本也可能随工具结果传给模型，请使用适合公开测试的材料。模型费用由所选服务产生。可以用“停止”取消请求；已经完成的工具修改会保留。工具调用最多执行 8 轮，HALCON 单个算子通常在返回后才能响应取消。
+聊天发送文本、工具定义、流程参数、ROI、设备状态和执行结果；不会自动发送图像字节。项目名称、工具名称和错误文本也可能随工具结果传给模型，请使用适合公开测试的材料。模型费用由所选服务产生。可以用“停止”取消请求；已经完成的工具修改会保留。工具调用最多执行 8 轮，HALCON 单个算子通常在返回后才能响应取消。
 
 [Harness 接口与调用示例](docs/Harness.md) · [结构与数据流](docs/Architecture.md)
 
@@ -63,7 +79,7 @@ dotnet publish .\src\VisionWorkbench\VisionWorkbench.csproj -c Release -r win-x6
 
 脚本构建并分别运行 `--check` 和 `--ui-smoke`，生成物放在已忽略的 `artifacts` 下。算法检查和界面冒烟检查不需要模型密钥；它们不能代替真实模型服务、真实设备或长期运行验证。
 
-验证记录见 [验证说明](docs/Validation.md)。检查包含真实 HALCON/OpenCV 运算、方案重开、ROI 范围、模板匹配、批量 CSV、取消、HTTP 工具认证，以及通过本机协议桩执行的完整聊天工具调用。真实云模型连接需要另行配置后验证。
+验证记录见 [验证说明](docs/Validation.md)。检查包含真实 HALCON/OpenCV 运算、方案重开、ROI 范围、模板匹配、批量 CSV、取消、HTTP 工具认证，以及通过本机协议桩执行的完整聊天工具调用。相机、通信与完整闭环的具体证据见验证记录；真实云模型连接需要另行配置后验证。
 
 ## 当前边界
 
@@ -78,5 +94,7 @@ dotnet publish .\src\VisionWorkbench\VisionWorkbench.csproj -c Release -r win-x6
 ## 许可与参考
 
 本项目自行编写的应用代码使用 [MIT License](LICENSE)。HALCON 是 MVTec 的商业产品，不受本项目 MIT 许可覆盖。OpenCV、OpenCvSharp、Microsoft.Extensions.AI 及其传递依赖分别遵循各自许可证，发布时应保留适用声明。
+
+协议实际复用 NModbus，消息总线复用 CommunityToolkit.Mvvm；第三方许可见 `licenses/`，源码阅读与复用说明见 [参考记录](docs/References.md)。
 
 产品方向参考 [OpenVisionLab](https://github.com/Noah8218/OpenVisionLab) 的视觉工作台思路；本项目采用更小的顺序流程界面，自行实现应用代码。VisionPro、HALCON 等产品名称的商标和版权属于各自权利人。

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using OpenCvSharp;
@@ -17,10 +17,13 @@ public sealed class WorkbenchController
     public string ProjectPath { get; private set; } = "";
     public string ImagePath { get; private set; } = "";
     public event Action? StateChanged;
+    public event Action<RunReport, PreviewFrame>? RunCompleted;
     public event Action<string>? Logged;
     private readonly PipelineRunner runner = new();
     private PreviewFrame? sourceFrame;
     private PreviewFrame? resultFrame;
+    private TaskCompletionSource? idleCompletion;
+    public Task WaitForIdleAsync() => idleCompletion?.Task ?? Task.CompletedTask;
     private readonly string workFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisionWorkbench", "Work");
 
     public WorkbenchController()
@@ -39,6 +42,25 @@ public sealed class WorkbenchController
         ResetResults();
         Log($"已加载 {Path.GetFileName(path)} · {Frame.Width} × {Frame.Height}");
         StateChanged?.Invoke();
+    }
+
+    public void AcceptCapturedFrame(PreviewFrame frame)
+    {
+        EnsureIdle();
+        sourceFrame = frame;
+        ImagePath = Document.ImagePath = "";
+        ResetResults();
+        StateChanged?.Invoke();
+    }
+
+    private void EnsureSourceFile()
+    {
+        if (sourceFrame == null || File.Exists(ImagePath)) return;
+        string path = Path.Combine(workFolder, "captured-source.png");
+        using var image = new Mat(sourceFrame.Height, sourceFrame.Width, MatType.CV_8UC1);
+        System.Runtime.InteropServices.Marshal.Copy(sourceFrame.Pixels, 0, image.Data, sourceFrame.Pixels.Length);
+        if (!Cv2.ImWrite(path, image)) throw new IOException("采集图像保存失败");
+        ImagePath = Document.ImagePath = path;
     }
 
     public void NewProject()
@@ -133,6 +155,7 @@ public sealed class WorkbenchController
         EnsureIdle();
         var step = FindStep(id);
         if (step.Kind is not "halcon.match" and not "halcon.ncc") throw new InvalidOperationException("只有模板匹配工具支持创建模板");
+        EnsureSourceFile();
         string path = Path.Combine(workFolder, $"template-{step.Id}.png");
         PipelineRunner.Train(ImagePath, step.Roi, path);
         step.TemplatePath = path;
@@ -147,17 +170,20 @@ public sealed class WorkbenchController
     {
         EnsureReady();
         var steps = Snapshot(throughStepId);
+        var input = sourceFrame!;
         IsBusy = true;
+        idleCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         ResetResults();
         StateChanged?.Invoke();
         try
         {
-            var result = await Task.Run(() => runner.Run(ImagePath, steps, token), token);
+            var result = await Task.Run(() => runner.Run(input, steps, token), token);
             Apply(result.Report, result.Frame);
+            RunCompleted?.Invoke(result.Report, input);
             return result.Report;
         }
         catch (OperationCanceledException) { Log("运行已取消"); throw; }
-        finally { IsBusy = false; StateChanged?.Invoke(); }
+        finally { IsBusy = false; idleCompletion.TrySetResult(); StateChanged?.Invoke(); }
     }
 
     public async Task BatchAsync(string folder, string csvPath, CancellationToken token = default)
@@ -167,6 +193,7 @@ public sealed class WorkbenchController
         if (files.Length == 0) throw new InvalidOperationException("文件夹中没有支持的图像");
         var steps = Snapshot(null);
         IsBusy = true;
+        idleCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         ResetResults();
         StateChanged?.Invoke();
         try
@@ -191,12 +218,13 @@ public sealed class WorkbenchController
             }
             Log($"批量完成 · {files.Length} 张 · {csvPath}");
         }
-        finally { IsBusy = false; StateChanged?.Invoke(); }
+        finally { IsBusy = false; idleCompletion.TrySetResult(); StateChanged?.Invoke(); }
     }
 
     public void SaveProject(string path)
     {
         EnsureIdle();
+        EnsureSourceFile();
         string folder = Path.GetDirectoryName(Path.GetFullPath(path))!;
         string assets = Path.Combine(folder, Path.GetFileNameWithoutExtension(path) + ".assets");
         Directory.CreateDirectory(assets);
@@ -347,7 +375,7 @@ public sealed class WorkbenchController
     private void EnsureReady()
     {
         EnsureIdle();
-        if (!File.Exists(ImagePath)) throw new InvalidOperationException("请先加载图像");
+        if (sourceFrame == null) throw new InvalidOperationException("请先加载或采集图像");
         if (!Document.Steps.Any(s => s.Enabled)) throw new InvalidOperationException("请添加并启用至少一个工具");
     }
     private static ProjectDocument Clone(ProjectDocument doc) => JsonSerializer.Deserialize<ProjectDocument>(JsonSerializer.Serialize(doc, JsonOptions), JsonOptions)!;

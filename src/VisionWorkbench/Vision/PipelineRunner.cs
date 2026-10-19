@@ -9,11 +9,24 @@ public sealed class PipelineRunner
 {
     public (RunReport Report, PreviewFrame Frame) Run(string imagePath, IReadOnlyList<VisionStep> steps, CancellationToken token)
     {
+        using var image = ImageBridge.ReadGray(imagePath);
+        return RunImage(image, steps, token);
+    }
+
+    public (RunReport Report, PreviewFrame Frame) Run(PreviewFrame frame, IReadOnlyList<VisionStep> steps, CancellationToken token)
+    {
+        using var mat = new Mat(frame.Height, frame.Width, MatType.CV_8UC1);
+        System.Runtime.InteropServices.Marshal.Copy(frame.Pixels, 0, mat.Data, frame.Pixels.Length);
+        using var image = ImageBridge.ToHalcon(mat);
+        return RunImage(image, steps, token);
+    }
+
+    private (RunReport Report, PreviewFrame Frame) RunImage(HObject original, IReadOnlyList<VisionStep> steps, CancellationToken token)
+    {
         var started = DateTime.Now;
         var watch = Stopwatch.StartNew();
         var results = new List<StepResult>();
         var overlays = new List<OverlayBox>();
-        using HObject original = ImageBridge.ReadGray(imagePath);
         HOperatorSet.CopyImage(original, out HObject current);
         try
         {

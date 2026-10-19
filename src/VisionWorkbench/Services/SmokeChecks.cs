@@ -36,6 +36,9 @@ public static partial class SmokeChecks
 
     private static async Task CheckEngine(string folder, List<object> checks)
     {
+        await CheckAcquisition(folder, checks);
+        await CheckCommunication(folder, checks);
+        await CheckDeviceRuntime(folder, checks);
         var controller = new WorkbenchController();
         controller.CreateDemo();
         var first = await controller.RunAsync();
@@ -120,7 +123,7 @@ public static partial class SmokeChecks
         await CheckExpandedEngine(folder, checks);
 
         var tools = new VisionTools(controller);
-        Require(tools.Functions.Count == 7, "工具数量不正确");
+        Require(tools.Functions.Count == VisionTools.Names.Count, "工具数量不正确");
         string state = await tools.GetWorkspaceState();
         Require(!state.Contains(controller.ImagePath), "工具状态不应包含本地路径");
         await ExpectFailure(() => tools.SetToolParameter(controller.Document.Steps[0].Id, "min", 999));
@@ -139,7 +142,7 @@ public static partial class SmokeChecks
             using var session = JsonDocument.Parse(File.ReadAllText(server.SessionFilePath));
             client.DefaultRequestHeaders.Authorization = new("Bearer", session.RootElement.GetProperty("token").GetString());
             var catalog = await client.GetStringAsync(server.BaseUrl + "tools");
-            Require(JsonDocument.Parse(catalog).RootElement.GetArrayLength() == 7, "HTTP 工具发现失败");
+            Require(JsonDocument.Parse(catalog).RootElement.GetArrayLength() == VisionTools.Names.Count, "HTTP 工具发现失败");
             var response = await client.PostAsync(server.BaseUrl + "tools/call", new StringContent("{\"name\":\"RunPipeline\",\"arguments\":{}}", Encoding.UTF8, "application/json"));
             Require(response.IsSuccessStatusCode && JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("Accepted").GetBoolean(), "HTTP 工具执行失败");
             checks.Add(new { name = "HTTP Harness 认证、发现与流程调用", passed = true });
@@ -167,6 +170,7 @@ public static partial class SmokeChecks
     private static async Task CheckUi(string folder, List<object> checks)
     {
         var window = (MainWindow)Application.Current.MainWindow;
+        window.Devices.Configuration.Trace.Enabled = false;
         var controller = window.Controller;
         controller.CreateDemo();
         var list = (ListBox)window.FindName("StepList");
@@ -203,6 +207,7 @@ public static partial class SmokeChecks
         window.Width = 1440;
         window.Height = 920;
         await CheckMeasurementUi(folder, window, checks);
+        await CheckDeviceUi(folder, window, checks);
     }
 
     private static void Capture(FrameworkElement element, string path)

@@ -46,6 +46,9 @@
 | `SetRoi` | `stepId`, `x`, `y`, `width`, `height`, `enabled`, `shape` | 设置图像内的矩形或圆形 ROI；`shape` 为 `rectangle` 或 `circle`，圆形宽高相等 |
 | `RunPipeline` | 可选 `throughStepId` | 等待整条流程或指定终点执行完成 |
 | `GetRunResults` | 无 | 返回最近一次完成报告 |
+| `GetDeviceStatus` | 无 | 读取相机、预览、TCP、串口、Modbus 实际状态 |
+| `CaptureFrame` | 可选 `inspect` | 从用户已连接的相机采集新图；可同时检测，停止实时预览 |
+| `SetCameraPreview` | `enabled` | 启停已连接相机的预览 |
 
 工具参数名大小写按 schema 使用。运行期间拒绝流程修改；参数变化会使旧结果失效。接口不提供任意代码执行、任意文件访问、图像载入、模板训练或云模型密钥读取。
 
@@ -74,3 +77,5 @@ Remove-Variable session, headers
 ```
 
 工作区和结果不自动携带图像字节与源文件路径，但项目名、参数、指标和错误消息属于实际数据。连接外部模型时，这些工具定义与结果可能被发送至所配置的模型服务。
+
+设备连接、SDK路径、PLC地址和寄存器写入由用户在设备页面配置。AI不拥有连接或任意寄存器写入工具；相机未连接时采图明确失败，不复用旧图冒充新拍照。

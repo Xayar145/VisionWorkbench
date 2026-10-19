@@ -10,6 +10,10 @@
 | `ToolCatalog` | 工具类型和参数范围 |
 | `PipelineRunner` | HALCON / OpenCV 顺序执行和结果判定 |
 | `ImageBridge` / `HalconRuntime` | 图像内存转换、灰度归一化、HALCON 原生库路径 |
+| `Acquisition` | IFrameSource 品牌适配、海康SDK、HALCON/USB/回放、串行生命周期 |
+| `Communication` | TCP/串口 JSON 传输与 NModbus TCP/RTU |
+| `DeviceRuntime` | 相机拍照检测、PLC握手、请求去重和任务关闭归属 |
+| `AppBus` / `InspectionJournal` | CommunityToolkit 窗体消息、检测追溯及图像关联 |
 | `AI` | 模型设置、聊天上下文、工具注册和本机 HTTP 接口 |
 | `SmokeChecks` | 算法与应用集成检查、界面冒烟检查 |
 
@@ -22,12 +26,12 @@
     → WorkbenchController.RunAsync
     → 创建方案快照、切换忙碌状态
     → 后台 PipelineRunner.Run
-    → 读取 8-bit 灰度图、顺序执行启用步骤
+    → 从本次源帧内存快照读取 8-bit 灰度图、顺序执行启用步骤
     → RunReport + PreviewFrame
     → 回到 UI 线程更新指标、状态、预览
 ```
 
-每次运行从源图像开始，步骤参数使用运行前快照。滤波和阈值工具替换当前图像；区域分析、尺寸测量和模板匹配读取当前图像并输出指标。步骤发生错误时停止后续执行；正常执行但超出判定条件则记录 NG。只有所有执行步骤成功且通过条件，整条流程才为 OK。
+每次运行从源图像的托管像素快照开始，步骤参数使用运行前快照。滤波和阈值工具替换当前图像；区域分析、尺寸测量和模板匹配读取当前图像并输出指标。步骤发生错误时停止后续执行；正常执行但超出判定条件则记录 NG。只有所有执行步骤成功且通过条件，整条流程才为 OK。
 
 图像核心对象使用 HALCON `HObject`，OpenCV 工具经 `Mat` 转换，界面只保留托管灰度像素和简单叠加框。HALCON、OpenCV 对象在使用完成后释放。
 
@@ -45,11 +49,11 @@
 
 `ChatService` 通过 `Microsoft.Extensions.AI` 调用支持工具的 OpenAI 兼容服务，`FunctionInvokingChatClient` 处理最多 8 轮工具交互。工具注册在 `VisionTools`，执行通过 WPF Dispatcher 回到界面所属线程；工具串行执行，流程运行本身转入后台。
 
-同一组 `VisionTools` 同时服务内置聊天和本机 `HarnessServer`。模型只能调用注册工具，不执行任意 C#、HALCON 脚本或 shell 命令。模型没有图像载入、文件保存和模板训练工具，这些由界面操作完成。
+同一组 `VisionTools` 同时服务内置聊天和本机 `HarnessServer`。模型只能调用注册工具，不执行任意 C#、HALCON 脚本或 shell 命令。模型没有任意文件载入、文件保存和模板训练工具。额外的固定设备工具只查询设备状态，或对用户已连接相机启停预览、采图与检测；硬件配置和 PLC 寄存器不交给模型任意修改。
 
 上下文保留工具调用与结果，裁剪时按用户轮次删除，避免留下孤立的工具结果。最近执行报告具有运行编号；参数修改后应重新运行，以实际报告判断结果。
 
-## 第一版算法语义
+## 算法语义
 
 - 内部为 8-bit 单通道图像；OpenCV 灰度工具用于练习转换接口，输入在读入时已统一灰度。
 - 矩形/圆形 ROI 使用原图外接框坐标，默认不启用；圆形宽高相等。模板创建后自动切换为全图搜索，可另设搜索 ROI。
@@ -63,3 +67,18 @@
 ## 验证范围
 
 `--check` 检查算法结果、方案保存恢复、工具执行与 HTTP 接口等集成行为；`--ui-smoke` 创建实际 WPF 窗口并输出截图。具体通过项与失败信息以 `artifacts` 下生成的检查报告为准。模型协议可通过本机 stub 验证；真实云模型仍需要有效的服务配置，不把 stub 结果等同于云模型能力。
+
+## 设备执行路径
+
+```text
+TCP / 串口 TRIGGER 或 PLC 触发边沿 / 设备窗 / CaptureFrame 工具
+    → DeviceRuntime 拍照互斥（同一请求编号共享任务）
+    → 停止预览 → CameraSession.SnapAsync
+    → IFrameSource（海康SDK / HALCON / USB / 回放 / 模拟）
+    → 独立托管灰度帧 → Controller.AcceptCapturedFrame → RunAsync
+    → 真实报告 → 通信响应 / PLC寄存器 → InspectionJournal
+```
+
+连续预览通过 LiveFrameMessage 经过 AppBus 到主窗，Dispatcher 只显示最新待显示帧；拍照检测期间不让预览覆盖当前源帧。设置窗不持有另一个控制器，关闭设置窗仅退订。主窗关闭先取消设备总生命周期，再等待采集、通信与检测归还资源，最后关闭窗口。
+
+设备配置独立于检测方案；采集图像保存方案时才写入方案资产。追溯默认写入站点 Records 目录，保存本次运行的原图与报告。没有把每个预览帧写到磁盘，也没有让第三方参考仓库的程序参与执行。

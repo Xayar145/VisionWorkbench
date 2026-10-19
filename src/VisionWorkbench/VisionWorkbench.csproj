@@ -8,9 +8,13 @@
     <PlatformTarget>x64</PlatformTarget>
     <HalconRoot Condition="'$(HalconRoot)' == ''">$(HALCONROOT)</HalconRoot>
     <AssemblyName>VisionWorkbench</AssemblyName>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="NModbus" Version="3.0.83" />
+    <PackageReference Include="NModbus.Serial" Version="3.0.83" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.0" />
     <Reference Include="halcondotnet">
       <HintPath>$(HalconRoot)\bin\dotnet35\halcondotnet.dll</HintPath>
       <Private>true</Private>

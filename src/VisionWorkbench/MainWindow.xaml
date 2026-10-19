@@ -61,6 +61,16 @@
                 <Separator/>
                 <MenuItem Header="加载直线与圆测量示例" Click="MetrologyDemo_Click"/>
             </MenuItem>
+            <MenuItem Header="设备(_D)">
+                <MenuItem Header="设备与通信设置..." Click="Devices_Click"/>
+                <Separator/>
+                <MenuItem Header="单次拍照" Click="CaptureDevice_Click"/>
+                <MenuItem Header="拍照并检测" Click="InspectDevice_Click"/>
+                <MenuItem Header="开始实时预览" Click="PreviewDevice_Click"/>
+                <MenuItem Header="停止实时预览" Click="StopPreviewDevice_Click"/>
+                <Separator/>
+                <MenuItem Header="检测记录..." Click="History_Click"/>
+            </MenuItem>
             <MenuItem Header="帮助(_H)">
                 <MenuItem Header="算子使用指南(_M)" Click="HelpManual_Click"/>
                 <Separator/>
@@ -337,6 +347,7 @@
                 </StackPanel>
             </StatusBarItem>
             <Separator/>
+            <StatusBarItem><TextBlock x:Name="DeviceStatus" Foreground="#475569" FontSize="10"/></StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="工程方案: " Foreground="#64748B"/>

@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Text.Json;
 using System.Windows.Threading;
 using Microsoft.Extensions.AI;
@@ -14,9 +14,11 @@ public class VisionTools
     private readonly Dispatcher dispatcher;
     private readonly SemaphoreSlim gate = new(1, 1);
     public event Action<string>? Logged;
+    public DeviceRuntime? Devices { get; set; }
     public IList<AITool> Functions { get; }
     public static IReadOnlyList<string> Names { get; } = ["ListAvailableTools", "GetWorkspaceState",
-        "AddVisionTool", "SetToolParameter", "SetRoi", "RunPipeline", "GetRunResults"];
+        "AddVisionTool", "SetToolParameter", "SetRoi", "RunPipeline", "GetRunResults",
+        "GetDeviceStatus", "CaptureFrame", "SetCameraPreview"];
 
     public VisionTools(WorkbenchController controller, Dispatcher? dispatcher = null)
     {
@@ -24,7 +26,8 @@ public class VisionTools
         this.dispatcher = dispatcher ?? Dispatcher.CurrentDispatcher;
         Functions = [AIFunctionFactory.Create(ListAvailableTools), AIFunctionFactory.Create(GetWorkspaceState),
             AIFunctionFactory.Create(AddVisionTool), AIFunctionFactory.Create(SetToolParameter),
-            AIFunctionFactory.Create(SetRoi), AIFunctionFactory.Create(RunPipeline), AIFunctionFactory.Create(GetRunResults)];
+            AIFunctionFactory.Create(SetRoi), AIFunctionFactory.Create(RunPipeline), AIFunctionFactory.Create(GetRunResults),
+            AIFunctionFactory.Create(GetDeviceStatus), AIFunctionFactory.Create(CaptureFrame), AIFunctionFactory.Create(SetCameraPreview)];
     }
 
     [Description("列出支持的 HALCON、OpenCV 工具及其类型标识和参数范围。")]
@@ -44,6 +47,13 @@ public class VisionTools
         Call("RunPipeline", new { throughStepId }, token);
     [Description("读取最近一次已完成的流程报告，报告仅反映该次运行时的状态。")]
     public Task<string> GetRunResults(CancellationToken token = default) => Call("GetRunResults", new { }, token);
+
+    [Description("读取已连接相机、预览、TCP、串口、Modbus的实际状态，不读取设备地址、SDK路径或凭据。")]
+    public Task<string> GetDeviceStatus(CancellationToken token = default) => Call("GetDeviceStatus", new { }, token);
+    [Description("从用户已连接的相机采集新图像，可选inspect=true表示同时检测。会停止实时预览；未连接时明确失败，不能用旧图代替新采集。")]
+    public Task<string> CaptureFrame(bool inspect = false, CancellationToken token = default) => Call("CaptureFrame", new { inspect }, token);
+    [Description("启动或停止用户已连接相机的实时预览。不会连接设备或修改通信参数。")]
+    public Task<string> SetCameraPreview(bool enabled, CancellationToken token = default) => Call("SetCameraPreview", new { enabled }, token);
 
     private Task<string> Call(string name, object arguments, CancellationToken token) =>
         InvokeAsync(name, JsonSerializer.SerializeToElement(arguments), token);
@@ -82,6 +92,20 @@ public class VisionTools
             ?? throw new ArgumentException("步骤不存在");
         switch (name)
         {
+            case "GetDeviceStatus":
+                var device = Devices ?? throw new InvalidOperationException("设备运行服务未连接到当前工具实例");
+                return new { device.Camera.IsConnected, device.Camera.IsPreviewing, device.Camera.FrameCount,
+                    Kind = device.Camera.Settings.Kind, TcpRunning = device.TcpServer.IsRunning,
+                    SerialOpen = device.Serial.IsOpen, ModbusConnected = device.Modbus.IsConnected, device.IsPolling };
+            case "CaptureFrame":
+                var runtime = Devices ?? throw new InvalidOperationException("设备运行服务未连接到当前工具实例");
+                var report = await runtime.CaptureAsync(args.TryGetProperty("inspect", out var inspect) && inspect.GetBoolean(), token);
+                return new { Captured = true, Width = controller.Frame?.Width, Height = controller.Frame?.Height, Report = report };
+            case "SetCameraPreview":
+                var preview = Devices ?? throw new InvalidOperationException("设备运行服务未连接到当前工具实例");
+                if (args.GetProperty("enabled").GetBoolean()) await preview.StartPreviewAsync();
+                else await preview.StopPreviewAsync();
+                return new { preview.Camera.IsPreviewing };
             case "ListAvailableTools": return ToolCatalog.All.Select(t => new
             {
                 t.Kind, t.Name, t.Backend, t.Description, Parameters = ToolCatalog.Create(t.Kind).Parameters
@@ -98,6 +122,7 @@ public class VisionTools
             };
             case "GetRunResults": return (object?)controller.LastReport ?? new { Message = "还没有运行结果" };
             case "RunPipeline":
+                if (Devices != null) await Devices.StopPreviewAsync();
                 var through = args.TryGetProperty("throughStepId", out var value) ? value.GetString() : null;
                 if (!string.IsNullOrEmpty(through) && !controller.Document.Steps.Any(s => s.Id == through))
                     throw new ArgumentException("指定的运行终点不存在");
