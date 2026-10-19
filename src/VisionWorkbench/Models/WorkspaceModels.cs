@@ -30,9 +30,11 @@ public class ToolParameter : Bindable
 
 public class RoiSpec : Bindable
 {
+    private string shape = "rectangle";
     private bool enabled;
     private double x, y, width = 160, height = 120;
     public bool Enabled { get => enabled; set => Set(ref enabled, value); }
+    public string Shape { get => shape; set => Set(ref shape, value); }
     public double X { get => x; set => Set(ref x, value); }
     public double Y { get => y; set => Set(ref y, value); }
     public double Width { get => width; set => Set(ref width, value); }
@@ -48,7 +50,8 @@ public class VisionStep : Bindable
     public ObservableCollection<ToolParameter> Parameters { get; set; } = [];
     private RoiSpec roi = new();
     public RoiSpec Roi { get => roi; set => Set(ref roi, value); }
-    public string TemplatePath { get; set; } = "";
+    private string templatePath = "";
+    public string TemplatePath { get => templatePath; set => Set(ref templatePath, value); }
     private bool enabled = true;
     public bool Enabled { get => enabled; set => Set(ref enabled, value); }
     private string status = "待运行";
@@ -67,7 +70,7 @@ public class ProjectDocument
 }
 
 public record ToolDefinition(string Kind, string Name, string Backend, string Description);
-public record OverlayBox(double X, double Y, double Width, double Height, string Label);
+public record OverlayBox(double X, double Y, double Width, double Height, string Label, string Shape = "rectangle");
 public record MetricRow(string Name, string Value, string Unit = "");
 public record StepResult(string StepId, string Name, bool Success, bool Accepted, double ElapsedMs,
     string Message, IReadOnlyList<MetricRow> Metrics);

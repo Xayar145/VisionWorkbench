@@ -1,0 +1,141 @@
+﻿{
+  "FormatVersion": 1,
+  "Name": "\u6D4B\u91CF\u6A21\u578B\u65B9\u6848",
+  "ImagePath": "\u6D4B\u91CF\u6A21\u578B\u65B9\u6848.assets\\source.png",
+  "Steps": [
+    {
+      "Id": "3f7ed107",
+      "Kind": "halcon.metrology_line",
+      "Name": "\u76F4\u7EBF\u6D4B\u91CF\u6A21\u578B",
+      "Backend": "HALCON",
+      "Parameters": [
+        {
+          "Key": "length1",
+          "Label": "\u5361\u5C3A\u6CD5\u5411\u534A\u957F px",
+          "Minimum": 1,
+          "Maximum": 500,
+          "Value": 20
+        },
+        {
+          "Key": "length2",
+          "Label": "\u5361\u5C3A\u5207\u5411\u534A\u5BBD px",
+          "Minimum": 1,
+          "Maximum": 100,
+          "Value": 5
+        },
+        {
+          "Key": "sigma",
+          "Label": "\u5E73\u6ED1 Sigma",
+          "Minimum": 0.4,
+          "Maximum": 10,
+          "Value": 1
+        },
+        {
+          "Key": "threshold",
+          "Label": "\u8FB9\u7F18\u5E45\u5EA6\u9608\u503C",
+          "Minimum": 1,
+          "Maximum": 255,
+          "Value": 20
+        },
+        {
+          "Key": "score",
+          "Label": "\u6700\u5C0F\u6709\u6548\u5361\u5C3A\u6BD4\u4F8B",
+          "Minimum": 0.1,
+          "Maximum": 1,
+          "Value": 0.5
+        },
+        {
+          "Key": "minSize",
+          "Label": "\u6700\u5C0F\u957F\u5EA6 px",
+          "Minimum": 0,
+          "Maximum": 100000,
+          "Value": 0
+        },
+        {
+          "Key": "maxSize",
+          "Label": "\u6700\u5927\u957F\u5EA6 px",
+          "Minimum": 0,
+          "Maximum": 100000,
+          "Value": 100000
+        }
+      ],
+      "Roi": {
+        "Enabled": true,
+        "Shape": "rectangle",
+        "X": 65,
+        "Y": 100,
+        "Width": 200,
+        "Height": 40
+      },
+      "TemplatePath": "",
+      "Enabled": true
+    },
+    {
+      "Id": "86e51205",
+      "Kind": "halcon.metrology_circle",
+      "Name": "\u5706\u6D4B\u91CF\u6A21\u578B",
+      "Backend": "HALCON",
+      "Parameters": [
+        {
+          "Key": "length1",
+          "Label": "\u5361\u5C3A\u6CD5\u5411\u534A\u957F px",
+          "Minimum": 1,
+          "Maximum": 500,
+          "Value": 20
+        },
+        {
+          "Key": "length2",
+          "Label": "\u5361\u5C3A\u5207\u5411\u534A\u5BBD px",
+          "Minimum": 1,
+          "Maximum": 100,
+          "Value": 5
+        },
+        {
+          "Key": "sigma",
+          "Label": "\u5E73\u6ED1 Sigma",
+          "Minimum": 0.4,
+          "Maximum": 10,
+          "Value": 1
+        },
+        {
+          "Key": "threshold",
+          "Label": "\u8FB9\u7F18\u5E45\u5EA6\u9608\u503C",
+          "Minimum": 1,
+          "Maximum": 255,
+          "Value": 20
+        },
+        {
+          "Key": "score",
+          "Label": "\u6700\u5C0F\u6709\u6548\u5361\u5C3A\u6BD4\u4F8B",
+          "Minimum": 0.1,
+          "Maximum": 1,
+          "Value": 0.5
+        },
+        {
+          "Key": "minSize",
+          "Label": "\u6700\u5C0F\u76F4\u5F84 px",
+          "Minimum": 0,
+          "Maximum": 100000,
+          "Value": 0
+        },
+        {
+          "Key": "maxSize",
+          "Label": "\u6700\u5927\u76F4\u5F84 px",
+          "Minimum": 0,
+          "Maximum": 100000,
+          "Value": 100000
+        }
+      ],
+      "Roi": {
+        "Enabled": true,
+        "Shape": "circle",
+        "X": 370,
+        "Y": 135,
+        "Width": 151,
+        "Height": 151
+      },
+      "TemplatePath": "",
+      "Enabled": true
+    }
+  ]
+}

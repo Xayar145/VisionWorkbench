@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -12,7 +12,7 @@ using VisionWorkbench.Models;
 
 namespace VisionWorkbench.Services;
 
-public static class SmokeChecks
+public static partial class SmokeChecks
 {
     public static async Task<int> Run(string[] args)
     {
@@ -117,6 +117,8 @@ public static class SmokeChecks
         Require((await reopenedMatch.RunAsync()).Accepted, "模板资产重开失败");
         checks.Add(new { name = "形状模板训练、匹配与重开", passed = true });
 
+        await CheckExpandedEngine(folder, checks);
+
         var tools = new VisionTools(controller);
         Require(tools.Functions.Count == 7, "工具数量不正确");
         string state = await tools.GetWorkspaceState();
@@ -171,6 +173,7 @@ public static class SmokeChecks
         list.SelectedIndex = 1;
         await controller.RunAsync();
         await window.Dispatcher.InvokeAsync(() => { window.UpdateLayout(); }, DispatcherPriority.ApplicationIdle);
+        CheckIndustrialNavigation(window, checks);
         var image = (Image)window.FindName("PreviewImage");
         Require(image.Source != null && list.Items.Count == 2, "窗口应显示图像和两项工具");
         Require(((DataGrid)window.FindName("ResultGrid")).Items.Count > 0, "窗口应显示检测结果");
@@ -197,6 +200,9 @@ public static class SmokeChecks
         await window.Dispatcher.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.ApplicationIdle);
         Capture((FrameworkElement)window.Content, Path.Combine(folder, "ui-compact.png"));
         checks.Add(new { name = "中文 AI 页面和最小窗口布局", passed = true, screenshots = new[] { "ui-ai.png", "ui-compact.png" } });
+        window.Width = 1440;
+        window.Height = 920;
+        await CheckMeasurementUi(folder, window, checks);
     }
 
     private static void Capture(FrameworkElement element, string path)

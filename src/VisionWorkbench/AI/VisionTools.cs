@@ -36,9 +36,9 @@ public class VisionTools
     [Description("修改已有步骤的数值参数，先通过 GetWorkspaceState 确认参数键名和范围。")]
     public Task<string> SetToolParameter(string stepId, string key, double value, CancellationToken token = default) =>
         Call("SetToolParameter", new { stepId, key, value }, token);
-    [Description("设置矩形 ROI，单位为像素、原点位于图像左上角，矩形必须位于当前图像范围内。")]
+    [Description("设置矩形或圆形 ROI，坐标为原图像素的外接框，原点在左上角。shape 为 rectangle 或 circle，圆形宽高必须相等。")]
     public Task<string> SetRoi(string stepId, double x, double y, double width, double height, bool enabled = true,
-        CancellationToken token = default) => Call("SetRoi", new { stepId, x, y, width, height, enabled }, token);
+        string shape = "rectangle", CancellationToken token = default) => Call("SetRoi", new { stepId, x, y, width, height, enabled, shape }, token);
     [Description("执行当前流程并等待实际结果，可选参数 throughStepId 表示运行到指定步骤。")]
     public Task<string> RunPipeline(string? throughStepId = null, CancellationToken token = default) =>
         Call("RunPipeline", new { throughStepId }, token);
@@ -124,7 +124,8 @@ public class VisionTools
             case "SetRoi":
                 var roiStep = Step();
                 var frame = controller.Frame ?? throw new InvalidOperationException("请先载入图像");
-                var roi = new RoiSpec { X = Number("x"), Y = Number("y"), Width = Number("width"), Height = Number("height"),
+                var roi = new RoiSpec { Shape = args.TryGetProperty("shape", out var shape) ? shape.GetString() ?? "rectangle" : roiStep.Roi.Shape,
+                    X = Number("x"), Y = Number("y"), Width = Number("width"), Height = Number("height"),
                     Enabled = !args.TryGetProperty("enabled", out var enable) || enable.GetBoolean() };
                 if (roi.X < 0 || roi.Y < 0 || roi.Width < 1 || roi.Height < 1 ||
                     roi.X + roi.Width > frame.Width || roi.Y + roi.Height > frame.Height)

@@ -1,40 +1,241 @@
-<Window x:Class="VisionWorkbench.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="视觉工作台" Width="1440" Height="920" MinWidth="1120" MinHeight="740" Background="#F3F5FA" FontFamily="Microsoft YaHei UI" FontSize="13" Foreground="#24324B">
-    <Grid Margin="18">
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="250"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <DockPanel Margin="0,0,0,16">
-            <StackPanel DockPanel.Dock="Left" Margin="0,0,28,0"><TextBlock Text="视觉工作台" FontSize="21" FontWeight="Bold"/><TextBlock Text="视觉流程 · HALCON + OpenCV" Foreground="#7E899D" Margin="0,4,0,0"/></StackPanel>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
-                <StackPanel x:Name="ProjectActions" Orientation="Horizontal">
-                    <Button Content="打开图像" Click="OpenImage_Click"/><Button Content="示例" Click="Demo_Click"/>
-                    <Button Content="打开方案" Click="OpenProject_Click"/><Button Content="保存" Click="Save_Click"/>
-                    <Button x:Name="RunButton" Content="▶ 运行" Click="Run_Click" Background="#4768F5" Foreground="White"/>
-                    <Button Content="批量" Click="Batch_Click"/>
+﻿<Window x:Class="VisionWorkbench.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="视觉工作台 — 工业视觉检测"
+        Width="1440" Height="920" MinWidth="1120" MinHeight="740"
+        Background="#F3F4F6" FontFamily="Segoe UI, Microsoft YaHei UI" FontSize="12" Foreground="#1F2937">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- 传统 Menu 菜单栏 -->
+            <RowDefinition Height="Auto"/> <!-- 紧凑工作台工具栏 -->
+            <RowDefinition Height="*"/>    <!-- 主工作区 (左右拖拽三栏) -->
+            <RowDefinition Height="Auto"/> <!-- 上下拖拽分割条 -->
+            <RowDefinition Height="210" MinHeight="90"/> <!-- 结果与日志面板 -->
+            <RowDefinition Height="Auto"/> <!-- 底部状态栏 -->
+        </Grid.RowDefinitions>
+
+        <!-- 1. 顶部传统 MenuStrip 菜单栏 -->
+        <Menu Grid.Row="0" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="0,0,0,1" Padding="4,2">
+            <MenuItem Header="文件(_F)" IsEnabled="{Binding IsEnabled, ElementName=ProjectActions}">
+                <MenuItem Header="新建方案(_N)" Click="NewProject_Click" InputGestureText="Ctrl+N"/>
+                <MenuItem Header="打开方案(_O)..." Click="OpenProject_Click" InputGestureText="Ctrl+O"/>
+                <MenuItem Header="保存方案(_S)" Click="Save_Click" InputGestureText="Ctrl+S"/>
+                <Separator/>
+                <MenuItem Header="打开图像(_I)..." Click="OpenImage_Click"/>
+                <MenuItem Header="加载示例图像与流程(_D)" Click="Demo_Click"/>
+                <MenuItem Header="批量检测图像文件夹(_B)..." Click="Batch_Click"/>
+                <Separator/>
+                <MenuItem Header="退出(_X)" Click="Exit_Click" InputGestureText="Alt+F4"/>
+            </MenuItem>
+            <MenuItem Header="编辑(_E)" IsEnabled="{Binding IsEnabled, ElementName=ProjectActions}">
+                <MenuItem Header="上移算子" Click="Up_Click" InputGestureText="Alt+Up"/>
+                <MenuItem Header="下移算子" Click="Down_Click" InputGestureText="Alt+Down"/>
+                <MenuItem Header="删除算子" Click="Remove_Click" InputGestureText="Del"/>
+                <Separator/>
+                <MenuItem Header="清空算子流程" Click="ClearSteps_Click"/>
+            </MenuItem>
+            <MenuItem Header="运行(_R)">
+                <MenuItem Header="执行全部检测流程(_R)" Click="Run_Click" InputGestureText="F5"/>
+                <MenuItem Header="停止执行(_S)" Click="Stop_Click" InputGestureText="Shift+F5"/>
+                <MenuItem Header="执行到当前选定算子" Click="RunToStep_Click" InputGestureText="F6"/>
+            </MenuItem>
+            <MenuItem Header="视图(_V)">
+                <MenuItem Header="适应窗口大小" Click="Fit_Click" InputGestureText="Ctrl+0"/>
+                <MenuItem Header="1:1 原始像素大小" Click="Actual_Click" InputGestureText="Ctrl+1"/>
+                <Separator/>
+                <MenuItem Header="显示原始输入图像" Click="ShowSource_Click"/>
+                <MenuItem Header="显示最新检测结果图" Click="ShowResult_Click"/>
+            </MenuItem>
+            <MenuItem Header="ROI 区域(_O)" IsEnabled="{Binding IsEnabled, ElementName=ProjectActions}">
+                <MenuItem Header="交互绘制矩形 ROI" Click="DrawRectRoi_Click"/>
+                <MenuItem Header="交互绘制圆形 ROI" Click="DrawCircleRoi_Click"/>
+                <Separator/>
+                <MenuItem Header="清除当前算子 ROI" Click="ClearRoi_Click"/>
+            </MenuItem>
+            <MenuItem Header="模型(_M)" IsEnabled="{Binding IsEnabled, ElementName=ProjectActions}">
+                <MenuItem Header="从当前 ROI 训练/更新模板" Click="TrainTemplate_Click"/>
+                <Separator/>
+                <MenuItem Header="插入直线卡尺测量模型" Click="InsertMetrologyLine_Click"/>
+                <MenuItem Header="插入圆形卡尺测量模型" Click="InsertMetrologyCircle_Click"/>
+                <MenuItem Header="插入 NCC 模板匹配" Click="InsertNcc_Click"/>
+                <Separator/>
+                <MenuItem Header="加载直线与圆测量示例" Click="MetrologyDemo_Click"/>
+            </MenuItem>
+            <MenuItem Header="帮助(_H)">
+                <MenuItem Header="算子使用指南(_M)" Click="HelpManual_Click"/>
+                <Separator/>
+                <MenuItem Header="关于视觉工作台(_A)" Click="About_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- 2. 紧凑工具栏 (去除渐变卡片，工业扁平风格) -->
+        <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="8,4">
+            <DockPanel>
+                <StackPanel x:Name="ProjectActions" Orientation="Horizontal" DockPanel.Dock="Left">
+                    <Button Content="新建" Click="NewProject_Click" ToolTip="新建工程方案" Margin="0,0,4,0"/>
+                    <Button Content="打开方案" Click="OpenProject_Click" ToolTip="打开检测方案" Margin="0,0,4,0"/>
+                    <Button Content="保存" Click="Save_Click" ToolTip="保存当前方案" Margin="0,0,4,0"/>
+                    <Border Width="1" Background="#E2E8F0" Margin="4,2,8,2"/>
+                    <Button Content="打开图像" Click="OpenImage_Click" ToolTip="打开待测图像" Margin="0,0,4,0"/>
+                    <Button Content="示例" Click="Demo_Click" ToolTip="加载演示算子与测试图" Margin="0,0,4,0"/>
+                    <Button Content="批量" Click="Batch_Click" ToolTip="批量执行图像文件夹检测" Margin="0,0,4,0"/>
+                    <Border Width="1" Background="#E2E8F0" Margin="4,2,8,2"/>
+                    <Button x:Name="RunButton" Content="▶ 运行" Click="Run_Click" Style="{StaticResource PrimaryButton}" ToolTip="运行检测流程 (F5)" Margin="0,0,4,0"/>
+                    <Button x:Name="StopButton" Content="⏹ 停止" Click="Stop_Click" IsEnabled="False" ToolTip="停止当前任务" Margin="0,0,4,0"/>
+                    <Border Width="1" Background="#E2E8F0" Margin="4,2,8,2"/>
+                    <Button Content="适应" Click="Fit_Click" ToolTip="视口适应大小" Margin="0,0,4,0"/>
+                    <Button Content="1:1" Click="Actual_Click" ToolTip="原始比例显示" Margin="0,0,4,0"/>
+                    <Button Content="原图" Click="ShowSource_Click" ToolTip="切换显示原始图像" Margin="0,0,4,0"/>
+                    <Button Content="结果图" Click="ShowResult_Click" ToolTip="切换显示检测渲染图" Margin="0,0,4,0"/>
                 </StackPanel>
-                <Button x:Name="StopButton" Content="停止" Click="Stop_Click" IsEnabled="False"/>
-            </StackPanel>
-        </DockPanel>
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="255"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="330"/></Grid.ColumnDefinitions>
-            <Border Background="White" CornerRadius="10" Padding="14">
-                <DockPanel>
-                    <StackPanel DockPanel.Dock="Top"><TextBlock Text="检测流程" FontWeight="Bold" FontSize="16"/><TextBlock Text="按顺序执行，选择工具调整参数" Foreground="#8A94A6" Margin="0,5,0,15"/>
-                        <ComboBox x:Name="ToolPicker" DisplayMemberPath="Name" Margin="0,0,0,8"/>
-                        <Button x:Name="AddButton" Content="＋ 添加工具" Click="Add_Click" Margin="0,0,0,12"/>
-                    </StackPanel>
-                    <StackPanel x:Name="StepActions" DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0"><Button Content="↑" Click="Up_Click"/><Button Content="↓" Click="Down_Click"/><Button Content="删除" Click="Remove_Click"/></StackPanel>
-                    <ListBox x:Name="StepList" BorderThickness="0" Background="Transparent" SelectionChanged="StepList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="7,10"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Margin" Value="0,2"/></Style></ListBox.ItemContainerStyle>
-                        <ListBox.ItemTemplate><DataTemplate><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><CheckBox IsChecked="{Binding Enabled}" Click="Enabled_Changed" VerticalAlignment="Top" Margin="0,3,9,0"/><StackPanel Grid.Column="1"><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Foreground="#8A94A6" FontSize="11" Margin="0,4,0,0"><Run Text="{Binding Backend}"/><Run Text=" · "/><Run Text="{Binding Status}"/></TextBlock></StackPanel></Grid></DataTemplate></ListBox.ItemTemplate>
-                    </ListBox>
-                </DockPanel>
+
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                    <ComboBox x:Name="RoiShapeCombo" SelectedIndex="0" SelectionChanged="RoiShapeCombo_SelectionChanged" Width="85" Margin="0,0,6,0" VerticalAlignment="Center">
+                        <ComboBoxItem Content="矩形 ROI" Tag="rectangle"/>
+                        <ComboBoxItem Content="圆形 ROI" Tag="circle"/>
+                    </ComboBox>
+                    <CheckBox x:Name="DrawRoi" Content="绘制 ROI" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="Medium"/>
+                    <Button Content="清除 ROI" Click="ClearRoi_Click" ToolTip="清空当前选区"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- 3. 主工作区：左栏(算子库+流程) + 中栏(图像视口) + 右栏(属性/模型/AI) -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" MinWidth="210" MaxWidth="460"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*" MinWidth="350"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="340" MinWidth="260" MaxWidth="520"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左栏：上部算子库 + 分割条 + 下部检测流程 -->
+            <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,0,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="1.1*" MinHeight="140"/>
+                        <RowDefinition Height="5"/>
+                        <RowDefinition Height="1*" MinHeight="140"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 左上：分类算子库 -->
+                    <DockPanel Grid.Row="0">
+                        <Border DockPanel.Dock="Top" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="8,6">
+                            <DockPanel>
+                                <TextBlock x:Name="OperatorCount" Text="算子库" FontWeight="Bold" FontSize="12.5" VerticalAlignment="Center" Foreground="#1E293B"/>
+                                <TextBlock Text="(双击添加)" Foreground="#94A3B8" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                <!-- 兼容自动化测试的 ToolPicker 与 AddButton -->
+                                <ComboBox x:Name="ToolPicker" DisplayMemberPath="Name" Visibility="Collapsed"/>
+                                <Button x:Name="AddButton" Content="＋ 添加" Click="Add_Click" HorizontalAlignment="Right" Padding="6,1" ToolTip="添加所选算子到流程"/>
+                            </DockPanel>
+                        </Border>
+                        <Border DockPanel.Dock="Top" Padding="6,4" Background="#FFFFFF" BorderBrush="#F1F5F9" BorderThickness="0,0,0,1">
+                            <TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Padding="4,2" ToolTip="搜索算子名称或功能"/>
+                        </Border>
+                        <TreeView x:Name="OperatorTree" BorderThickness="0" Background="Transparent" MouseDoubleClick="OperatorTree_MouseDoubleClick" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem">
+                                    <Setter Property="IsExpanded" Value="{Binding Expanded, Mode=OneWay}"/>
+                                    <Setter Property="Padding" Value="2,2"/>
+                                </Style>
+                            </TreeView.ItemContainerStyle>
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Tools}">
+                                    <TextBlock Text="{Binding CategoryName}" FontWeight="SemiBold" Foreground="#334155" Margin="0,2"/>
+                                    <HierarchicalDataTemplate.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2" ToolTip="{Binding Description}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Normal" Foreground="#1F2937"/>
+                                                </StackPanel>
+                                                <Border Grid.Column="1" Background="#F1F5F9" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="2" Padding="4,0" Margin="4,0,0,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Backend}" FontSize="9" Foreground="#475569"/>
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </HierarchicalDataTemplate.ItemTemplate>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </DockPanel>
+
+                    <!-- 左栏内部水平分割条 -->
+                    <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#F1F5F9"/>
+
+                    <!-- 左下：检测流程步骤列表 -->
+                    <DockPanel Grid.Row="2">
+                        <Border DockPanel.Dock="Top" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,1,0,1" Padding="8,5">
+                            <DockPanel>
+                                <TextBlock Text="检测流程 (顺序执行)" FontWeight="Bold" FontSize="12.5" VerticalAlignment="Center" Foreground="#1E293B"/>
+                                <StackPanel x:Name="StepActions" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Content="▲" Click="Up_Click" ToolTip="上移算子" Padding="5,1" Margin="0,0,2,0"/>
+                                    <Button Content="▼" Click="Down_Click" ToolTip="下移算子" Padding="5,1" Margin="0,0,2,0"/>
+                                    <Button Content="✕" Click="Remove_Click" ToolTip="删除算子" Padding="5,1"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                        <ListBox x:Name="StepList" BorderThickness="0" Background="Transparent" SelectionChanged="StepList_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="6,5"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                    <Setter Property="BorderBrush" Value="#F1F5F9"/>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox IsChecked="{Binding Enabled}" Click="Enabled_Changed" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="启用/禁用该算子"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontWeight="Medium" Foreground="#0F172A"/>
+                                            <TextBlock Foreground="#64748B" FontSize="10.5" Margin="0,2,0,0">
+                                                <Run Text="{Binding Backend}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="#059669" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Grid>
             </Border>
-            <Border Grid.Column="2" Background="#182232" CornerRadius="10" ClipToBounds="True">
+
+            <!-- 左右拖拽分割条 1 -->
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#E5E7EB"/>
+
+            <!-- 中栏：工业深色视口画布 -->
+            <Border Grid.Column="2" Background="#182026">
                 <DockPanel>
-                    <Grid DockPanel.Dock="Top" Margin="15,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="ImageInfo" Text="图像预览" Foreground="#CDD6E7" VerticalAlignment="Center"/><StackPanel Grid.Column="1" Orientation="Horizontal"><CheckBox x:Name="DrawRoi" Content="绘制 ROI" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/><Button Content="适应" Click="Fit_Click" Padding="9,4"/><Button Content="1:1" Click="Actual_Click" Padding="9,4"/></StackPanel></Grid>
-                    <Grid><TextBlock x:Name="EmptyImage" Text="打开图像，或加载示例开始检测" Foreground="#8997B0" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <ScrollViewer x:Name="ImageScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="Image_MouseWheel" SizeChanged="ImageScroller_SizeChanged">
+                    <Border DockPanel.Dock="Top" Background="#242D35" BorderBrush="#323C47" BorderThickness="0,0,0,1" Padding="10,5">
+                        <DockPanel>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="ImageInfo" Text="未加载图像" Foreground="#CBD5E1" FontWeight="Medium" FontSize="11.5"/>
+                                <Border Width="1" Background="#3E4C59" Margin="10,2"/>
+                                <TextBlock x:Name="CursorPosText" Text="X: 0, Y: 0 | 灰度: -" Foreground="#94A3B8" FontSize="11"/>
+                            </StackPanel>
+                            <TextBlock Text="滚轮缩放 / 左键拖拽ROI" Foreground="#64748B" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </Border>
+
+                    <Grid Background="#141A1F">
+                        <TextBlock x:Name="EmptyImage" Text="请点击上方“打开图像”或“示例”载入工业视觉图像开始检测" Foreground="#475569" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="13"/>
+                        <ScrollViewer x:Name="ImageScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="Image_MouseWheel" SizeChanged="ImageScroller_SizeChanged" Background="Transparent">
                             <Grid x:Name="ImageSurface" HorizontalAlignment="Center" VerticalAlignment="Center" Background="Transparent" MouseLeftButtonDown="Image_Down" MouseMove="Image_Move" MouseLeftButtonUp="Image_Up">
-                                <Grid.LayoutTransform><ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/></Grid.LayoutTransform>
+                                <Grid.LayoutTransform>
+                                    <ScaleTransform x:Name="ImageScale" ScaleX="1" ScaleY="1"/>
+                                </Grid.LayoutTransform>
                                 <Image x:Name="PreviewImage" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                                 <Canvas x:Name="OverlayCanvas" IsHitTestVisible="False"/>
                             </Grid>
@@ -42,23 +243,106 @@
                     </Grid>
                 </DockPanel>
             </Border>
-            <Border Grid.Column="4" Background="White" CornerRadius="10" Padding="10">
-                <TabControl BorderThickness="0" Background="White">
-                    <TabItem Header="工具参数"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="ParameterPanel" Margin="8,15,8,5"><TextBlock Text="选择左侧工具查看参数" Foreground="#8A94A6"/></StackPanel></ScrollViewer></TabItem>
-                    <TabItem Header="AI 助手"><Grid Margin="5,10,5,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                        <StackPanel><DockPanel><Button Content="连接设置" Click="Settings_Click" DockPanel.Dock="Right" Margin="0"/><Button Content="清空" Click="ClearChat_Click" DockPanel.Dock="Right"/><TextBlock Text="工具调用" VerticalAlignment="Center" Foreground="#8A94A6"/></DockPanel>
-                            <Expander Header="本机工具接口（Harness）" Margin="0,10,0,0"><StackPanel Margin="0,8,0,4"><TextBlock Text="接口地址" FontSize="11" Foreground="#8A94A6"/><TextBox x:Name="HarnessAddress" IsReadOnly="True" Margin="0,3,0,8"/><TextBlock Text="本次会话文件（含本机访问密钥）" FontSize="11" Foreground="#8A94A6"/><TextBox x:Name="HarnessSession" IsReadOnly="True" TextWrapping="Wrap" Margin="0,3,0,0"/></StackPanel></Expander>
-                        </StackPanel>
-                        <ScrollViewer x:Name="ChatScroller" Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,10"><StackPanel x:Name="ChatMessages"><TextBlock Text="可以让 AI 查看流程、修改参数、运行检测并解释结果。请先配置模型连接。" TextWrapping="Wrap" Foreground="#7E899D"/></StackPanel></ScrollViewer>
-                        <TextBox x:Name="ChatInput" Grid.Row="2" MinHeight="72" MaxHeight="130" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
-                        <DockPanel Grid.Row="3" Margin="0,8,0,0"><Button x:Name="SendButton" Content="发送" Click="Send_Click" DockPanel.Dock="Right" Margin="0" Background="#4768F5" Foreground="White"/><TextBlock Text="运行操作会记录在下方日志" FontSize="11" Foreground="#8A94A6" VerticalAlignment="Center"/></DockPanel>
-                    </Grid></TabItem>
+
+            <!-- 左右拖拽分割条 2 -->
+            <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#E5E7EB"/>
+
+            <!-- 右栏：属性/ROI/测量模型 + 低调 AI 助手 Tab -->
+            <Border Grid.Column="4" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1,0,0,0">
+                <TabControl BorderThickness="0" Background="#FFFFFF">
+                    <!-- Tab 1: 算子属性与测量模型参数 -->
+                    <TabItem Header="属性与参数">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="ParameterPanel" Margin="10,12,10,12">
+                                <TextBlock Text="在左侧选择流程算子以查看和配置参数" Foreground="#94A3B8"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- Tab 2: 辅助 AI 助手 -->
+                    <TabItem Header="AI 助手">
+                        <Grid Margin="8,8,8,4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0">
+                                <DockPanel Margin="0,0,0,6">
+                                    <TextBlock Text="流程助手" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#334155"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Content="清空对话" Click="ClearChat_Click" Padding="6,1" Margin="0,0,4,0"/>
+                                        <Button Content="连接设置" Click="Settings_Click" Padding="6,1"/>
+                                    </StackPanel>
+                                </DockPanel>
+                                <Expander Header="本机 Harness 接口" IsExpanded="False" Margin="0,2,0,6">
+                                    <StackPanel Margin="2,4,2,2">
+                                        <TextBlock Text="服务基地址" FontSize="10.5" Foreground="#64748B"/>
+                                        <TextBox x:Name="HarnessAddress" IsReadOnly="True" Margin="0,2,0,4" Padding="3,1" FontSize="11"/>
+                                        <TextBlock Text="会话授权文件" FontSize="10.5" Foreground="#64748B"/>
+                                        <TextBox x:Name="HarnessSession" IsReadOnly="True" TextWrapping="Wrap" Margin="0,2,0,2" Padding="3,1" FontSize="11"/>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+
+                            <Border Grid.Row="1" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="2" Background="#F8FAFC" Margin="0,2,0,6">
+                                <ScrollViewer x:Name="ChatScroller" VerticalScrollBarVisibility="Auto" Padding="6">
+                                    <StackPanel x:Name="ChatMessages">
+                                        <TextBlock Text="您可以向 AI 发送指令，例如：“调整阈值算子的参数”、“分析当前图像的边缘问题”或“增加高斯滤波去除噪声并重新运行”。" TextWrapping="Wrap" Foreground="#64748B" FontSize="11.5"/>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+
+                            <TextBox x:Name="ChatInput" Grid.Row="2" MinHeight="65" MaxHeight="120" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Padding="4,4"/>
+
+                            <DockPanel Grid.Row="3" Margin="0,6,0,0">
+                                <Button x:Name="SendButton" Content="发送指令" Click="Send_Click" DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}" Padding="12,3"/>
+                                <TextBlock Text="AI 执行的修改会实时同步至工作台" FontSize="10.5" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Grid>
+                    </TabItem>
                 </TabControl>
             </Border>
         </Grid>
-        <Border Grid.Row="2" Background="White" CornerRadius="10" Margin="0,12,0,0" Padding="12,8">
-            <TabControl BorderThickness="0"><TabItem Header="检测结果"><DataGrid x:Name="ResultGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" GridLinesVisibility="Horizontal" HeadersVisibility="Column" BorderThickness="0"><DataGrid.Columns><DataGridTextColumn Header="工具 / 指标" Binding="{Binding Name}" Width="2*"/><DataGridTextColumn Header="结果" Binding="{Binding Value}" Width="3*"/><DataGridTextColumn Header="单位" Binding="{Binding Unit}" Width="*"/></DataGrid.Columns></DataGrid></TabItem><TabItem Header="运行日志"><TextBox x:Name="LogBox" IsReadOnly="True" BorderThickness="0" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12"/></TabItem></TabControl>
+
+        <!-- 4. 上下拖拽分割条 -->
+        <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#E5E7EB"/>
+
+        <!-- 5. 底部结果指标与日志面板 -->
+        <Border Grid.Row="4" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0">
+            <TabControl BorderThickness="0" Background="#FFFFFF">
+                <TabItem Header="检测结果">
+                    <DataGrid x:Name="ResultGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" GridLinesVisibility="Horizontal" HeadersVisibility="Column" BorderThickness="0" Background="Transparent" AlternatingRowBackground="#F9FAFB">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="检测工具 / 指标项" Binding="{Binding Name}" Width="3*"/>
+                            <DataGridTextColumn Header="测量判定数值 / 状态" Binding="{Binding Value}" Width="3*"/>
+                            <DataGridTextColumn Header="工程单位" Binding="{Binding Unit}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="运行日志">
+                    <TextBox x:Name="LogBox" IsReadOnly="True" BorderThickness="0" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas, Cascadia Code, Courier New" FontSize="11.5" Background="#FAFAFA" Padding="6"/>
+                </TabItem>
+            </TabControl>
         </Border>
-        <DockPanel Grid.Row="3" Margin="3,10,3,0"><TextBlock x:Name="StatusText" Text="就绪" Foreground="#7E899D"/><TextBlock x:Name="ProjectInfo" HorizontalAlignment="Right" Foreground="#7E899D"/></DockPanel>
+
+        <!-- 6. 底部状态栏 -->
+        <StatusBar Grid.Row="5" Background="#F1F5F9" BorderBrush="#CBD5E1" BorderThickness="0,1,0,0" Padding="6,2" Height="24">
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="系统状态: " Foreground="#64748B"/>
+                    <TextBlock x:Name="StatusText" Text="就绪" FontWeight="Medium" Foreground="#1E293B"/>
+                </StackPanel>
+            </StatusBarItem>
+            <Separator/>
+            <StatusBarItem HorizontalAlignment="Right">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="工程方案: " Foreground="#64748B"/>
+                    <TextBlock x:Name="ProjectInfo" Text="未命名方案" Foreground="#475569"/>
+                </StackPanel>
+            </StatusBarItem>
+        </StatusBar>
     </Grid>
 </Window>

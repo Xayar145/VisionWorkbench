@@ -20,6 +20,7 @@ public sealed class WorkbenchController
     public event Action<string>? Logged;
     private readonly PipelineRunner runner = new();
     private PreviewFrame? sourceFrame;
+    private PreviewFrame? resultFrame;
     private readonly string workFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisionWorkbench", "Work");
 
     public WorkbenchController()
@@ -37,6 +38,30 @@ public sealed class WorkbenchController
         Document.ImagePath = ImagePath;
         ResetResults();
         Log($"已加载 {Path.GetFileName(path)} · {Frame.Width} × {Frame.Height}");
+        StateChanged?.Invoke();
+    }
+
+    public void NewProject()
+    {
+        EnsureIdle();
+        Document = new();
+        ImagePath = ProjectPath = "";
+        Frame = sourceFrame = resultFrame = null;
+        LastReport = null;
+        Log("已新建检测方案");
+        StateChanged?.Invoke();
+    }
+
+    public void ShowSource()
+    {
+        Frame = sourceFrame;
+        StateChanged?.Invoke();
+    }
+
+    public void ShowResult()
+    {
+        if (resultFrame == null) throw new InvalidOperationException("还没有当前方案的检测结果，请先运行");
+        Frame = resultFrame;
         StateChanged?.Invoke();
     }
 
@@ -89,11 +114,14 @@ public sealed class WorkbenchController
     public void SetRoi(string id, RoiSpec roi)
     {
         EnsureIdle();
+        if (roi.Shape is not "rectangle" and not "circle") throw new ArgumentException("ROI 形状仅支持矩形和圆形");
         if (roi.Enabled)
         {
             if (Frame == null) throw new InvalidOperationException("请先加载图像");
             if (!double.IsFinite(roi.X + roi.Y + roi.Width + roi.Height) || roi.X < 0 || roi.Y < 0 || roi.Width < 1 || roi.Height < 1 || roi.X + roi.Width > Frame.Width || roi.Y + roi.Height > Frame.Height)
                 throw new ArgumentException("ROI 必须位于图像范围内");
+            if (roi.Shape == "circle" && Math.Abs(roi.Width - roi.Height) > 0.001)
+                throw new ArgumentException("圆形 ROI 的宽高必须相等");
         }
         FindStep(id).Roi = roi;
         ResetResults();
@@ -104,7 +132,7 @@ public sealed class WorkbenchController
     {
         EnsureIdle();
         var step = FindStep(id);
-        if (step.Kind != "halcon.match") throw new InvalidOperationException("只有形状模板匹配工具支持创建模板");
+        if (step.Kind is not "halcon.match" and not "halcon.ncc") throw new InvalidOperationException("只有模板匹配工具支持创建模板");
         string path = Path.Combine(workFolder, $"template-{step.Id}.png");
         PipelineRunner.Train(ImagePath, step.Roi, path);
         step.TemplatePath = path;
@@ -227,6 +255,7 @@ public sealed class WorkbenchController
         Document.ImagePath = imagePath;
         ImagePath = imagePath;
         Frame = sourceFrame = frame;
+        resultFrame = null;
         ProjectPath = Path.GetFullPath(path);
         LastReport = null;
         Log($"已打开方案：{loaded.Name}");
@@ -254,6 +283,26 @@ public sealed class WorkbenchController
         Log("示例就绪：预期 3 个区域，判定 OK");
     }
 
+    public void CreateMetrologyDemo()
+    {
+        EnsureIdle();
+        string path = Path.Combine(workFolder, "demo-metrology.png");
+        using (var image = new Mat(400, 640, MatType.CV_8UC1, Scalar.All(24)))
+        {
+            Cv2.Rectangle(image, new Rect(45, 120, 240, 180), Scalar.All(220), -1);
+            Cv2.Circle(image, new Point(445, 210), 70, Scalar.All(220), -1);
+            Cv2.ImWrite(path, image);
+        }
+        Document = new() { Name = "直线与圆测量" };
+        ProjectPath = "";
+        LoadImage(path);
+        var line = AddStep("halcon.metrology_line");
+        SetRoi(line.Id, new() { Enabled = true, X = 65, Y = 100, Width = 200, Height = 40 });
+        var circle = AddStep("halcon.metrology_circle");
+        SetRoi(circle.Id, new() { Enabled = true, Shape = "circle", X = 370, Y = 135, Width = 151, Height = 151 });
+        Log("测量示例就绪：圆直径约 140 px，直线结果为有效卡尺间的拟合线段");
+    }
+
     public VisionStep FindStep(string id) => Document.Steps.FirstOrDefault(s => s.Id == id) ?? throw new ArgumentException($"工具不存在：{id}");
     public void Log(string message) => Logged?.Invoke(message);
     public void NotifyEdited()
@@ -277,7 +326,7 @@ public sealed class WorkbenchController
     private void Apply(RunReport report, PreviewFrame frame)
     {
         LastReport = report;
-        Frame = frame;
+        Frame = resultFrame = frame;
         foreach (var r in report.Steps)
         {
             var step = FindStep(r.StepId);
@@ -290,6 +339,7 @@ public sealed class WorkbenchController
     private void ResetResults()
     {
         LastReport = null;
+        resultFrame = null;
         Frame = sourceFrame;
         foreach (var step in Document.Steps) { step.Status = "待运行"; step.ElapsedMs = 0; }
     }

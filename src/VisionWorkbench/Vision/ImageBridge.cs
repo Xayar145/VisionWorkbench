@@ -32,15 +32,27 @@ public static class ImageBridge
         return image;
     }
 
-    public static HObject CopyRoi(HObject original, HObject processed, RoiSpec roi)
+    public static HObject CopyRoi(HObject original, HObject processed, RoiSpec roi, bool clearOutside = false)
     {
         using var target = ToMat(original);
+        if (clearOutside) target.SetTo(Scalar.Black);
         using var source = ToMat(processed);
-        var rect = new Rect((int)roi.X, (int)roi.Y, (int)roi.Width, (int)roi.Height);
-        using var sourceRoi = new Mat(source, rect);
-        using var targetRoi = new Mat(target, rect);
-        sourceRoi.CopyTo(targetRoi);
+        using HObject region = CreateRoi(roi);
+        HOperatorSet.RegionToBin(region, out HObject binary, 255, 0, target.Width, target.Height);
+        using (binary)
+        using (var mask = ToMat(binary)) source.CopyTo(target, mask);
         return ToHalcon(target);
+    }
+
+    public static HObject CreateRoi(RoiSpec roi)
+    {
+        HObject region;
+        if (roi.Shape == "circle")
+            HOperatorSet.GenCircle(out region, roi.Y + (roi.Height - 1) / 2,
+                roi.X + (roi.Width - 1) / 2, (Math.Min(roi.Width, roi.Height) - 1) / 2);
+        else
+            HOperatorSet.GenRectangle1(out region, roi.Y, roi.X, roi.Y + roi.Height - 1, roi.X + roi.Width - 1);
+        return region;
     }
 
     public static HObject ReadGray(string path)

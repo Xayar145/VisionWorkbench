@@ -43,7 +43,7 @@
 | `GetWorkspaceState` | 无 | 返回图像尺寸、步骤、参数、ROI、忙碌状态和最近运行编号 |
 | `AddVisionTool` | `kind` | 添加目录中已有工具 |
 | `SetToolParameter` | `stepId`, `key`, `value` | 修改数值参数并检查范围 |
-| `SetRoi` | `stepId`, `x`, `y`, `width`, `height`, `enabled` | 设置图像内的矩形 ROI |
+| `SetRoi` | `stepId`, `x`, `y`, `width`, `height`, `enabled`, `shape` | 设置图像内的矩形或圆形 ROI；`shape` 为 `rectangle` 或 `circle`，圆形宽高相等 |
 | `RunPipeline` | 可选 `throughStepId` | 等待整条流程或指定终点执行完成 |
 | `GetRunResults` | 无 | 返回最近一次完成报告 |
 

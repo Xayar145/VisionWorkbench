@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using HalconDotNet;
 using OpenCvSharp;
 using VisionWorkbench.Models;
@@ -21,6 +21,7 @@ public sealed class PipelineRunner
             {
                 token.ThrowIfCancellationRequested();
                 var timer = Stopwatch.StartNew();
+                HObject? next = null;
                 try
                 {
                     Validate(step);
@@ -28,7 +29,6 @@ public sealed class PipelineRunner
                     var metrics = new List<MetricRow>();
                     bool accepted = true;
                     string message = "完成";
-                    HObject? next = null;
                     overlays.Clear();
                     switch (step.Kind)
                     {
@@ -65,13 +65,46 @@ public sealed class PipelineRunner
                             }
                             break;
                         case "halcon.mean":
-                            int size = (int)step.Get("size");
-                            HOperatorSet.MeanImage(current, out next, size, size);
-                            if (step.Roi.Enabled)
+                            HOperatorSet.MeanImage(current, out next, (int)step.Get("size"), (int)step.Get("size"));
+                            break;
+                        case "halcon.median":
+                            HOperatorSet.MedianImage(current, out next, "circle", (int)step.Get("radius"), "mirrored");
+                            break;
+                        case "halcon.gaussian":
+                            HOperatorSet.GaussFilter(current, out next, (int)step.Get("size"));
+                            break;
+                        case "halcon.invert":
+                            HOperatorSet.InvertImage(current, out next);
+                            break;
+                        case "halcon.emphasize":
+                            HOperatorSet.Emphasize(current, out next, (int)step.Get("size"), (int)step.Get("size"), step.Get("factor"));
+                            break;
+                        case "halcon.open":
+                        case "halcon.close":
+                        case "halcon.fill":
+                            next = Morphology(input, current, step);
+                            break;
+                        case "halcon.edges":
+                            HOperatorSet.EdgesImage(current, out HObject amplitude, out HObject direction, "canny", step.Get("sigma"), "nms", -1, -1);
+                            using (amplitude) using (direction) HOperatorSet.ConvertImageType(amplitude, out next, "byte");
+                            break;
+                        case "halcon.intensity":
+                            HOperatorSet.GetDomain(input, out HObject domain);
+                            using (domain)
                             {
-                                using HObject filtered = next;
-                                next = ImageBridge.CopyRoi(current, filtered, step.Roi);
+                                HOperatorSet.Intensity(domain, input, out HTuple mean, out HTuple deviation);
+                                using (mean) using (deviation)
+                                {
+                                    metrics.Add(new("平均灰度", mean.D.ToString("F2")));
+                                    metrics.Add(new("灰度标准差", deviation.D.ToString("F2")));
+                                    accepted = mean.D >= step.Get("minMean") && mean.D <= step.Get("maxMean");
+                                }
                             }
+                            break;
+                        case "halcon.metrology_line":
+                        case "halcon.metrology_circle":
+                            accepted = MetrologyTools.Run(current, step, overlays, metrics);
+                            message = accepted ? "测量合格" : "未找到有效边缘或尺寸不合格";
                             break;
                         case "halcon.measure":
                             HOperatorSet.Threshold(input, out HObject measured, step.Get("min"), 255);
@@ -94,6 +127,7 @@ public sealed class PipelineRunner
                             }
                             break;
                         case "halcon.match":
+                        case "halcon.ncc":
                             accepted = Match(input, step, overlays, metrics);
                             message = accepted ? "定位成功" : "未找到匹配";
                             break;
@@ -108,30 +142,34 @@ public sealed class PipelineRunner
                             }
                             break;
                         case "opencv.gaussian":
-                            using (var mat = ImageBridge.ToMat(input))
+                        case "opencv.median":
+                        case "opencv.canny":
+                            using (var mat = ImageBridge.ToMat(current))
                             using (var filtered = new Mat())
                             {
-                                int kernel = (int)step.Get("size");
-                                if (step.Roi.Enabled)
+                                if (step.Kind == "opencv.gaussian")
                                 {
-                                    // OpenCV 不识别 HALCON 的缩小域，显式限制处理矩形。
-                                    var roi = step.Roi;
-                                    var rect = new Rect((int)roi.X, (int)roi.Y, (int)roi.Width, (int)roi.Height);
-                                    using var target = new Mat(mat, rect);
-                                    Cv2.GaussianBlur(target, filtered, new Size(kernel, kernel), 0);
-                                    filtered.CopyTo(target);
-                                    next = ImageBridge.ToHalcon(mat);
-                                }
-                                else
-                                {
+                                    int kernel = (int)step.Get("size");
                                     Cv2.GaussianBlur(mat, filtered, new Size(kernel, kernel), 0);
-                                    next = ImageBridge.ToHalcon(filtered);
                                 }
+                                else if (step.Kind == "opencv.median") Cv2.MedianBlur(mat, filtered, (int)step.Get("size"));
+                                else Cv2.Canny(mat, filtered, step.Get("low"), step.Get("high"));
+                                next = ImageBridge.ToHalcon(filtered);
                             }
                             break;
                         default: throw new InvalidOperationException($"未知工具：{step.Kind}");
                     }
-                    if (next != null) { current.Dispose(); current = next; }
+                    if (next != null)
+                    {
+                        if (step.Roi.Enabled)
+                        {
+                            using HObject processed = next;
+                            // 区域和边缘图供后续分析使用，ROI 外不能混入原图灰度。
+                            bool clearOutside = step.Kind is "halcon.threshold" or "halcon.open" or "halcon.close" or "halcon.fill" or "halcon.edges" or "opencv.canny";
+                            next = ImageBridge.CopyRoi(current, processed, step.Roi, clearOutside);
+                        }
+                        current.Dispose(); current = next; next = null;
+                    }
                     results.Add(new(step.Id, step.Name, true, accepted, timer.Elapsed.TotalMilliseconds, message, metrics));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -139,6 +177,7 @@ public sealed class PipelineRunner
                     results.Add(new(step.Id, step.Name, false, false, timer.Elapsed.TotalMilliseconds, ex.Message, []));
                     break;
                 }
+                finally { next?.Dispose(); }
             }
             token.ThrowIfCancellationRequested();
             var report = new RunReport(Guid.NewGuid().ToString("N")[..12], started,
@@ -153,11 +192,16 @@ public sealed class PipelineRunner
         foreach (var p in step.Parameters)
             if (!double.IsFinite(p.Value) || p.Value < p.Minimum || p.Value > p.Maximum)
                 throw new ArgumentException($"{p.Label} 必须在 {p.Minimum} 到 {p.Maximum} 之间");
-        if (step.Kind is "halcon.mean" or "opencv.gaussian")
+        if (step.Kind is "halcon.mean" or "halcon.gaussian" or "halcon.emphasize" or "opencv.gaussian" or "opencv.median")
         {
             double size = step.Get("size");
             if (size != Math.Truncate(size) || (int)size % 2 == 0) throw new ArgumentException("滤波核大小必须是正奇数");
         }
+        if (step.Kind == "halcon.median" && step.Get("radius") != Math.Truncate(step.Get("radius"))) throw new ArgumentException("中值半径必须为整数");
+        if (step.Kind == "opencv.median" && step.Get("size") < 3) throw new ArgumentException("中值滤波核至少为 3");
+        if (step.Kind == "opencv.canny" && step.Get("low") > step.Get("high")) throw new ArgumentException("低阈值不能大于高阈值");
+        if (step.Kind == "halcon.intensity" && step.Get("minMean") > step.Get("maxMean")) throw new ArgumentException("最小平均灰度不能大于最大值");
+        if (step.Kind.StartsWith("halcon.metrology_") && step.Get("minSize") > step.Get("maxSize")) throw new ArgumentException("最小尺寸不能大于最大值");
         if (step.Kind == "halcon.threshold" && step.Get("min") > step.Get("max")) throw new ArgumentException("最小灰度不能大于最大灰度");
         if (step.Kind == "halcon.blob" && (step.Get("minArea") > step.Get("maxArea") || step.Get("minCount") > step.Get("maxCount")))
             throw new ArgumentException("最小面积/数量不能大于最大值");
@@ -167,14 +211,37 @@ public sealed class PipelineRunner
     private static HObject GetInput(HObject image, RoiSpec roi)
     {
         if (!roi.Enabled) { HOperatorSet.CopyImage(image, out HObject copy); return copy; }
+        if (roi.Shape is not ("rectangle" or "circle")) throw new ArgumentException("ROI 形状应为矩形或圆形");
+        if (roi.Shape == "circle" && Math.Abs(roi.Width - roi.Height) > 0.01) throw new ArgumentException("圆形 ROI 的宽高必须相等");
         HOperatorSet.GetImageSize(image, out HTuple width, out HTuple height);
         using (width) using (height)
         {
             if (!double.IsFinite(roi.X + roi.Y + roi.Width + roi.Height) || roi.X < 0 || roi.Y < 0 || roi.Width < 1 || roi.Height < 1 || roi.X + roi.Width > width.I || roi.Y + roi.Height > height.I)
                 throw new ArgumentException("ROI 必须位于图像内，且宽高至少为 1 像素");
         }
-        HOperatorSet.GenRectangle1(out HObject rectangle, roi.Y, roi.X, roi.Y + roi.Height - 1, roi.X + roi.Width - 1);
-        using (rectangle) { HOperatorSet.ReduceDomain(image, rectangle, out HObject reduced); return reduced; }
+        using HObject rectangle = ImageBridge.CreateRoi(roi);
+        HOperatorSet.ReduceDomain(image, rectangle, out HObject reduced); return reduced;
+    }
+
+    private static HObject Morphology(HObject input, HObject current, VisionStep step)
+    {
+        HOperatorSet.Threshold(input, out HObject region, 1, 255);
+        using (region)
+        {
+            HObject processed;
+            if (step.Kind == "halcon.open") HOperatorSet.OpeningCircle(region, out processed, step.Get("radius"));
+            else if (step.Kind == "halcon.close") HOperatorSet.ClosingCircle(region, out processed, step.Get("radius"));
+            else HOperatorSet.FillUp(region, out processed);
+            using (processed)
+            {
+                HOperatorSet.GetImageSize(current, out HTuple width, out HTuple height);
+                using (width) using (height)
+                {
+                    HOperatorSet.RegionToBin(processed, out HObject result, 255, 0, width, height);
+                    return result;
+                }
+            }
+        }
     }
 
     private static void AddBoxes(HObject regions, List<OverlayBox> overlays)
@@ -189,11 +256,17 @@ public sealed class PipelineRunner
         if (!File.Exists(step.TemplatePath)) throw new InvalidOperationException("请先绘制 ROI 并创建模板");
         using HObject template = ImageBridge.ReadGray(step.TemplatePath);
         double angle = step.Get("angle") * Math.PI / 180;
-        HOperatorSet.CreateShapeModel(template, "auto", -angle, angle * 2, "auto", "auto", "use_polarity", "auto", "auto", out HTuple model);
+        HTuple model;
+        if (step.Kind == "halcon.ncc") HOperatorSet.CreateNccModel(template, "auto", -angle, angle * 2, "auto", "use_polarity", out model);
+        else HOperatorSet.CreateShapeModel(template, "auto", -angle, angle * 2, "auto", "auto", "use_polarity", "auto", "auto", out model);
         try
         {
-            HOperatorSet.FindShapeModel(input, model, -angle, angle * 2, step.Get("score"), (int)step.Get("count"), 0.5, "least_squares", 0, 0.9,
-                out HTuple rows, out HTuple cols, out HTuple angles, out HTuple scores);
+            HTuple rows, cols, angles, scores;
+            if (step.Kind == "halcon.ncc")
+                HOperatorSet.FindNccModel(input, model, -angle, angle * 2, step.Get("score"), (int)step.Get("count"), 0.5, "true", 0,
+                    out rows, out cols, out angles, out scores);
+            else HOperatorSet.FindShapeModel(input, model, -angle, angle * 2, step.Get("score"), (int)step.Get("count"), 0.5, "least_squares", 0, 0.9,
+                out rows, out cols, out angles, out scores);
             using (rows) using (cols) using (angles) using (scores)
             {
                 metrics.Add(new("匹配数量", scores.Length.ToString(), "个"));
@@ -207,7 +280,12 @@ public sealed class PipelineRunner
                 return scores.Length > 0;
             }
         }
-        finally { HOperatorSet.ClearShapeModel(model); model.Dispose(); }
+        finally
+        {
+            if (step.Kind == "halcon.ncc") HOperatorSet.ClearNccModel(model);
+            else HOperatorSet.ClearShapeModel(model);
+            model.Dispose();
+        }
     }
 
     public static void Train(string imagePath, RoiSpec roi, string destination)
