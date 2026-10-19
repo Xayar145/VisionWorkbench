@@ -1,0 +1,83 @@
+﻿{
+  "FormatVersion": 1,
+  "Name": "\u793A\u4F8B\u65B9\u6848",
+  "ImagePath": "\u793A\u4F8B\u65B9\u6848.assets\\source.png",
+  "Steps": [
+    {
+      "Id": "1103ef4a",
+      "Kind": "halcon.threshold",
+      "Name": "\u9608\u503C\u5206\u5272",
+      "Backend": "HALCON",
+      "Parameters": [
+        {
+          "Key": "min",
+          "Label": "\u6700\u5C0F\u7070\u5EA6",
+          "Minimum": 0,
+          "Maximum": 255,
+          "Value": 100
+        },
+        {
+          "Key": "max",
+          "Label": "\u6700\u5927\u7070\u5EA6",
+          "Minimum": 0,
+          "Maximum": 255,
+          "Value": 255
+        }
+      ],
+      "Roi": {
+        "Enabled": false,
+        "X": 0,
+        "Y": 0,
+        "Width": 160,
+        "Height": 120
+      },
+      "TemplatePath": "",
+      "Enabled": true
+    },
+    {
+      "Id": "8c812f8c",
+      "Kind": "halcon.blob",
+      "Name": "\u533A\u57DF\u5206\u6790",
+      "Backend": "HALCON",
+      "Parameters": [
+        {
+          "Key": "minArea",
+          "Label": "\u6700\u5C0F\u9762\u79EF",
+          "Minimum": 0,
+          "Maximum": 100000000,
+          "Value": 100
+        },
+        {
+          "Key": "maxArea",
+          "Label": "\u6700\u5927\u9762\u79EF",
+          "Minimum": 0,
+          "Maximum": 100000000,
+          "Value": 100000000
+        },
+        {
+          "Key": "minCount",
+          "Label": "\u6700\u5C11\u6570\u91CF",
+          "Minimum": 0,
+          "Maximum": 10000,
+          "Value": 3
+        },
+        {
+          "Key": "maxCount",
+          "Label": "\u6700\u591A\u6570\u91CF",
+          "Minimum": 0,
+          "Maximum": 10000,
+          "Value": 3
+        }
+      ],
+      "Roi": {
+        "Enabled": false,
+        "X": 0,
+        "Y": 0,
+        "Width": 160,
+        "Height": 120
+      },
+      "TemplatePath": "",
+      "Enabled": true
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+    <HalconRoot Condition="'$(HalconRoot)' == ''">$(HALCONROOT)</HalconRoot>
+    <AssemblyName>VisionWorkbench</AssemblyName>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="halcondotnet">
+      <HintPath>$(HalconRoot)\bin\dotnet35\halcondotnet.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <PackageReference Include="OpenCvSharp4.Windows" Version="4.13.0.20260627" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.11.0" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.11.0" />
+  </ItemGroup>
+  <Target Name="CheckHalcon" BeforeTargets="ResolveReferences" Condition="!Exists('$(HalconRoot)\bin\dotnet35\halcondotnet.dll')">
+    <Error Text="未找到 HALCON .NET 库。请安装 HALCON 24.11，并设置 HALCONROOT，或传入 -p:HalconRoot=安装目录。" />
+  </Target>
+</Project>

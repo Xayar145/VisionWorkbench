@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+.packages/
+.vs/
+.idea/
+artifacts/
+*.user
+*.suo
+*.log
+*.license
+*.lic
+**/halcondotnet*.dll
+**/halcon.dll
+.env
+appsettings.local.json
+local.settings.json
